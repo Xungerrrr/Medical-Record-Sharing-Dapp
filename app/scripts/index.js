@@ -6,25 +6,24 @@ import { default as Web3 } from 'web3'
 import { default as contract } from 'truffle-contract'
 
 // Import our contract artifacts and turn them into usable abstractions.
-import metaCoinArtifact from '../../build/contracts/MetaCoin.json'
+import medicalRecordArtifact from '../../build/contracts/MedicalRecord.json'
 
-// MetaCoin is our usable abstraction, which we'll use through the code below.
-const MetaCoin = contract(metaCoinArtifact)
+// MedicalRecord is our usable abstraction, which we'll use through the code below.
+const MedicalRecord = contract(medicalRecordArtifact)
 
-// The following code is simple to show off interacting with your contracts.
-// As your needs grow you will likely need to change its form and structure.
-// For application bootstrapping, check out window.addEventListener below.
 let accounts
-let account
+let hospitalAccount
+let doctorAccount
+let patientAccount
 
 const App = {
   start: function () {
     const self = this
 
-    // Bootstrap the MetaCoin abstraction for Use.
-    MetaCoin.setProvider(web3.currentProvider)
+    // Bootstrap the MedicalRecord abstraction for Use.
+    MedicalRecord.setProvider(web3.currentProvider)
 
-    // Get the initial account balance so it can be displayed.
+    // Get all accounts
     web3.eth.getAccounts(function (err, accs) {
       if (err != null) {
         alert('There was an error fetching your accounts.')
@@ -37,9 +36,6 @@ const App = {
       }
 
       accounts = accs
-      account = accounts[0]
-
-      self.refreshBalance()
     })
   },
 
@@ -48,40 +44,91 @@ const App = {
     status.innerHTML = message
   },
 
-  refreshBalance: function () {
-    const self = this
+  registerHospital: function() {
+    const hospitalAddress = document.getElementById('hospital_address')
+    hospitalAccount = accounts[0]
+    hospitalAddress.innerHTML = hospitalAccount
+  },
 
-    let meta
-    MetaCoin.deployed().then(function (instance) {
-      meta = instance
-      return meta.getBalance.call(account, { from: account })
+  registerDoctor: function() {
+    const doctorAddress = document.getElementById('doctor_address')
+    doctorAccount = accounts[1]
+    const hospital = document.getElementById('input_hospital_address').value
+    let medicalRecord
+    MedicalRecord.deployed().then(function (instance) {
+      medicalRecord = instance
+      medicalRecord.registerDoctor(hospital, { from: doctorAccount })
+    })
+    doctorAddress.innerHTML = doctorAccount
+  },
+
+  registerPatient: function() {
+    const patientAddress = document.getElementById('patient_address')
+    patientAccount = accounts[2]
+    patientAddress.innerHTML = patientAccount
+  },
+
+  readRecord: function() {
+    const self = this
+    let medicalRecord
+    const patient = document.getElementById('input_patient_address').value;
+    MedicalRecord.deployed().then(function (instance) {
+      medicalRecord = instance
+      return medicalRecord.readHistory.call(patient, { from: doctorAccount })
     }).then(function (value) {
-      const balanceElement = document.getElementById('balance')
-      balanceElement.innerHTML = value.valueOf()
+      const status = document.getElementById('status')
+      status.innerHTML = value.valueOf()
+      if (status.innerHTML !== "No permission to access history!") {
+        document.getElementById('add').style.visibility = "visible"
+        document.getElementById('new').style.visibility = "visible"
+        document.getElementById('new_record').style.visibility = "visible"
+      }
+      else {
+        document.getElementById('add').style.visibility = "hidden"
+        document.getElementById('new').style.visibility = "hidden"
+        document.getElementById('new_record').style.visibility = "hidden"
+      }
+
     }).catch(function (e) {
       console.log(e)
       self.setStatus('Error getting balance; see log.')
     })
   },
 
-  sendCoin: function () {
+  addRecord: function() {
     const self = this
-
-    const amount = parseInt(document.getElementById('amount').value)
-    const receiver = document.getElementById('receiver').value
-
-    this.setStatus('Initiating transaction... (please wait)')
-
-    let meta
-    MetaCoin.deployed().then(function (instance) {
-      meta = instance
-      return meta.sendCoin(receiver, amount, { from: account })
+    let medicalRecord
+    MedicalRecord.deployed().then(function (instance) {
+      medicalRecord = instance
+      const newRecord = document.getElementById('new_record').value
+      var currentDate = new Date()
+      var date = currentDate.getDate()
+      var month = currentDate.getMonth()
+      var year = currentDate.getFullYear()
+      var hour = ("0" + currentDate.getHours()).slice(-2)
+      var minute = ("0" + currentDate.getMinutes()).slice(-2)
+      var second = ("0" + currentDate.getSeconds()).slice(-2)
+      var dateString = year + "-" + (month + 1) + "-" + date + " " + hour + ":" + minute + ":" + second + "  " + newRecord
+      medicalRecord.addRecord(patientAccount, dateString, { from: doctorAccount })
     }).then(function () {
-      self.setStatus('Transaction complete!')
-      self.refreshBalance()
-    }).catch(function (e) {
-      console.log(e)
-      self.setStatus('Error sending coin; see log.')
+      self.readRecord()
+    })
+  },
+
+  grantAccess: function() {
+    let medicalRecord
+    const hospital = document.getElementById('patient_hospital_address').value
+    MedicalRecord.deployed().then(function (instance) {
+      medicalRecord = instance
+      medicalRecord.grantAccess(hospital, { from: patientAccount })
+    })
+  },
+  removeAccess: function() {
+    let medicalRecord
+    const hospital = document.getElementById('patient_hospital_address').value
+    MedicalRecord.deployed().then(function (instance) {
+      medicalRecord = instance
+      medicalRecord.removeAccess(hospital, { from: patientAccount })
     })
   }
 }
